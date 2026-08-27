@@ -1,0 +1,54 @@
+name: Download AromaEsse Korean Brand Deck
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/download-aromaesse-korean-brand-deck.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install PDF tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+
+      - name: Download and validate Korean brand deck
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://www.tradekorea.com/product/download.do?productfileno=118011'
+          curl -L --fail --retry 4 --retry-all-errors --connect-timeout 30 --max-time 300 \
+            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151.0.0.0 Safari/537.36' \
+            -H 'Accept: application/pdf,application/octet-stream;q=0.9,*/*;q=0.8' \
+            -o 10_AROMA_ESSE_KOR.pdf "$url"
+          test "$(head -c 5 10_AROMA_ESSE_KOR.pdf)" = '%PDF-'
+          pdfinfo 10_AROMA_ESSE_KOR.pdf | tee pdfinfo.txt
+          pdftotext -layout 10_AROMA_ESSE_KOR.pdf aromaesse.txt || true
+          python3 - <<'PY'
+          import pathlib, re
+          p=pathlib.Path('aromaesse.txt')
+          s=p.read_text(encoding='utf-8',errors='ignore') if p.exists() else ''
+          ko=len(re.findall(r'[가-힣]',s))
+          pathlib.Path('korean_chars.txt').write_text(str(ko),encoding='utf-8')
+          print('KOREAN_CHARS=',ko)
+          if ko < 100:
+              raise SystemExit('Not enough Korean text')
+          PY
+
+      - name: Upload validated PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: aromaesse-korean-brand-deck
+          path: |
+            10_AROMA_ESSE_KOR.pdf
+            pdfinfo.txt
+            korean_chars.txt
+          if-no-files-found: error
+          retention-days: 7
