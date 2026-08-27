@@ -1,0 +1,50 @@
+name: Download KKONGLASH Korean Deck
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/download-kkonglash-korean-deck.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install PDF tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+      - name: Download and validate official Korean deck
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://link.inpock.co.kr/api/r/-T4bfLKjLbKM1dMq6rKZ3agM5vU5E9OQzVJtIst05l3BRVN4KbbeXnphkB2Z-4p9vOGjYaENA76Uv6vg3X4WTAMq8clwSfPBt_tbwlylisSrDkappBZVWjkFPkC7XK2_RG3APONznZXQdams6OO0gIZTaeco2I0ir_i4nPPinYihwnpLZzLFE8V5rIyC5EaME0Nl1VLalEtPPF62qFJl7DRo0g45TXATtz_-cSg'
+          curl -L --fail --retry 4 --retry-all-errors --connect-timeout 30 --max-time 300 \
+            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151.0.0.0 Safari/537.36' \
+            -o 10_KKONGLASH_KOR.pdf "$url"
+          test "$(head -c 5 10_KKONGLASH_KOR.pdf)" = '%PDF-'
+          pdfinfo 10_KKONGLASH_KOR.pdf | tee pdfinfo.txt
+          pdftotext -layout 10_KKONGLASH_KOR.pdf kkonglash.txt || true
+          python3 - <<'PY'
+          import pathlib,re
+          s=pathlib.Path('kkonglash.txt').read_text(encoding='utf-8',errors='ignore') if pathlib.Path('kkonglash.txt').exists() else ''
+          ko=len(re.findall(r'[가-힣]',s))
+          print('KOREAN_CHARS=',ko)
+          pathlib.Path('korean_chars.txt').write_text(str(ko),encoding='utf-8')
+          if ko < 100:
+              raise SystemExit('Not enough Korean text')
+          PY
+      - name: Upload PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: kkonglash-korean-brand-deck
+          path: |
+            10_KKONGLASH_KOR.pdf
+            pdfinfo.txt
+            korean_chars.txt
+          if-no-files-found: error
+          retention-days: 7
