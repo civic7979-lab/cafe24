@@ -68,13 +68,7 @@ jobs:
                 [ -z "$pages" ] && pages=0
                 txt="package/text/${name}.txt"
                 pdftotext -layout "$out" "$txt" 2>/dev/null || :
-                ko="$(python3 - "$txt" <<'PY'
-import pathlib,re,sys
-p=pathlib.Path(sys.argv[1])
-s=p.read_text('utf-8',errors='ignore') if p.exists() else ''
-print(len(re.findall(r'[가-힣]',s)))
-PY
-)"
+                ko="$(python3 -c 'import pathlib,re,sys; p=pathlib.Path(sys.argv[1]); s=p.read_text(encoding="utf-8",errors="ignore") if p.exists() else ""; print(len(re.findall(r"[가-힣]",s)))' "$txt")"
                 bytes="$(stat -c %s "$out")"
                 success=$((success+1))
                 printf '%s,%s,OK,%s,%s,%s,"%s"\n' "$total" "$name" "$pages" "$ko" "$bytes" "$url" >> package/검증결과.csv
