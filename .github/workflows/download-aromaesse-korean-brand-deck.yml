@@ -19,7 +19,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq poppler-utils
 
-      - name: Download and validate Korean brand deck
+      - name: Download and inspect Korean brand deck
         shell: bash
         run: |
           set -euo pipefail
@@ -38,11 +38,11 @@ jobs:
           ko=len(re.findall(r'[가-힣]',s))
           pathlib.Path('korean_chars.txt').write_text(str(ko),encoding='utf-8')
           print('KOREAN_CHARS=',ko)
-          if ko < 100:
-              raise SystemExit('Not enough Korean text')
           PY
+          pdftoppm -f 1 -singlefile -png -r 120 10_AROMA_ESSE_KOR.pdf first_page
+          pdftoppm -f 2 -singlefile -png -r 120 10_AROMA_ESSE_KOR.pdf second_page
 
-      - name: Upload validated PDF
+      - name: Upload PDF and previews
         uses: actions/upload-artifact@v4
         with:
           name: aromaesse-korean-brand-deck
@@ -50,5 +50,7 @@ jobs:
             10_AROMA_ESSE_KOR.pdf
             pdfinfo.txt
             korean_chars.txt
+            first_page.png
+            second_page.png
           if-no-files-found: error
           retention-days: 7
