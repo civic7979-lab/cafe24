@@ -1,0 +1,121 @@
+name: Collect Korean Beauty Brand Decks
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/collect-korean-beauty-brand-decks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Install PDF tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+
+      - name: Download and validate 20 Korean brand decks
+        shell: bash
+        run: |
+          set -u
+          mkdir -p package/pdfs package/text
+          cat > sources.tsv <<'EOF'
+          01_TOUCH_IN_SOL_KOR	https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/exh-3a31effa-2060-415a-9d9a-6594ee0c255b/6408c625-8f1b-4a46-82c9-268d18f56ba9.pdf
+          02_PEACHOLIC_KOR	https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/exh-ad512a9f-c5ec-4da9-850f-3794c5cd8da7/83de347b-de7a-4ecd-abc2-713ac4d1ce72.pdf
+          03_ANILLO_KOR	https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/exh-0a5a05fe-8768-4f99-bf7e-472f19547512/544980c5-2bb3-4312-a4dc-0c7954dbd136.pdf
+          04_NUEGRAY_KOR	https://static1.squarespace.com/static/63f57bfab0cea507c283b469/t/65545dbb66daf04ce227c2e0/1769737679826/230717_%E1%84%82%E1%85%AE%E1%84%80%E1%85%B3%E1%84%85%E1%85%A6%E1%84%8B%E1%85%B5%2B%E1%84%87%E1%85%B3%E1%84%85%E1%85%A2%E1%86%AB%E1%84%83%E1%85%B3%2B%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2%E1%84%89%E1%85%A5_KOR.pdf
+          05_PURGEON_KOR	https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/exh-4c69734e-23b1-4f79-aff1-b448c037b736/87f6f30b-ec35-4448-8698-c6d4daef3d72.pdf
+          06_CCLIMGLAM_KOR	https://m.cclimglam.co.kr/web/upload/weskin32/kr/main/cg_230208.pdf
+          07_NATURAL_DERMA_PROJECT_KOR	https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/exh-e322fc90-6070-4d21-b21a-3e2dba2abf43/fa8c3dc6-d592-4479-ad3a-bb6c1c1c5888.pdf
+          08_CELEBON_KOR	https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/exh-1a9e7737-85d9-4c5b-952e-7301f3dcadcf/70a45df9-b9c6-4d71-b4a0-df44285a5e50.pdf
+          09_KIWIGLOW_KOR	https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/exh-43d7550b-d42f-4d17-8f96-619972798f28/ccd94cd8-c3a1-4ebe-b171-4d345f2c1df8.pdf
+          10_DAILYWEEKLY_KOR	https://drive.usercontent.google.com/download?id=1J7GblluEuQTsHkcGuChKrtdg-gtal073&export=download&confirm=t
+          11_EQQUALBERRY_KOR	https://www.tradekorea.com/product/download.do?productfileno=103361
+          12_FORMAL_BEE_KIDS_KOR	https://drive.usercontent.google.com/download?id=1nyR8wp0JHlPuUGzTiehOIWb-XLAweZiw&export=download&confirm=t
+          13_LINDSAY_KOR	https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/exh-8b6c8d6d-2921-4db5-bb0d-487049936359/3a1e2747-eb28-49bb-9084-19ac4af0c942.pdf
+          14_PLU_KOR	https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/exh-eb085ca4-7f7e-474f-a6dc-e7f5d4f79064/1f831bc7-4a31-40cf-93ef-763852ada2b6.pdf
+          15_ECOLLINE_KOR	https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/exh-e4e64f2d-36dc-488c-908e-602b7065378c/7fbc57b8-3675-42f6-86da-ac910a947190.pdf
+          16_SALON_DE_NEVAEH_KOR	https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/exh-16c4f041-c9c6-4746-b341-32dba7b5e9d5/a894c9c9-1769-49c5-b400-9f41c16424bd.pdf
+          17_BEICOS_STORYHOA_KOR	https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/exh-ce0ad604-fdbe-47dc-8fdb-59d8bb508a7e/aa4bd91f-d859-473f-b34d-43d2fdc27774.pdf
+          18_INNABELLO_KOR	https://www.tradekorea.com/product/download.do?productfileno=109640
+          19_HEBESTEM_KOR	https://www.tradekorea.com/product/download.do?productfileno=115253
+          20_MAYBENA_KOR	https://www.tradekorea.com/product/download.do?productfileno=108664
+          EOF
+
+          printf 'no,brand_file,status,pages,korean_chars,bytes,source_url\n' > package/검증결과.csv
+          : > package/실패목록.txt
+          success=0
+          total=0
+          while IFS=$'\t' read -r name url; do
+            [ -z "${name:-}" ] && continue
+            total=$((total+1))
+            out="package/pdfs/${name}.pdf"
+            tmp="${out}.part"
+            echo "[$total/20] $name"
+            if curl -L --fail --retry 4 --retry-all-errors --connect-timeout 30 --max-time 300 \
+              -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151.0.0.0 Safari/537.36' \
+              -H 'Accept: application/pdf,application/octet-stream;q=0.9,*/*;q=0.8' \
+              -o "$tmp" "$url"; then
+              sig="$(head -c 5 "$tmp" 2>/dev/null || true)"
+              if [ "$sig" = '%PDF-' ]; then
+                mv "$tmp" "$out"
+                pages="$(pdfinfo "$out" 2>/dev/null | awk -F: '/^Pages:/ {gsub(/ /,"",$2); print $2}' | head -1)"
+                [ -z "$pages" ] && pages=0
+                txt="package/text/${name}.txt"
+                pdftotext -layout "$out" "$txt" 2>/dev/null || :
+                ko="$(python3 - "$txt" <<'PY'
+import pathlib,re,sys
+p=pathlib.Path(sys.argv[1])
+s=p.read_text('utf-8',errors='ignore') if p.exists() else ''
+print(len(re.findall(r'[가-힣]',s)))
+PY
+)"
+                bytes="$(stat -c %s "$out")"
+                success=$((success+1))
+                printf '%s,%s,OK,%s,%s,%s,"%s"\n' "$total" "$name" "$pages" "$ko" "$bytes" "$url" >> package/검증결과.csv
+              else
+                printf '%s\t%s\tPDF signature missing\n' "$name" "$url" >> package/실패목록.txt
+                printf '%s,%s,FAIL,0,0,0,"%s"\n' "$total" "$name" "$url" >> package/검증결과.csv
+                rm -f "$tmp"
+              fi
+            else
+              printf '%s\t%s\tdownload failed\n' "$name" "$url" >> package/실패목록.txt
+              printf '%s,%s,FAIL,0,0,0,"%s"\n' "$total" "$name" "$url" >> package/검증결과.csv
+              rm -f "$tmp"
+            fi
+          done < sources.tsv
+
+          cp sources.tsv package/원본링크_20개.tsv
+          cat > package/README.txt <<EOF
+          국내 한글 뷰티 브랜드 소개서 수집본
+          - 요청 수량: 20개
+          - 실제 PDF 검증 성공: ${success}개
+          - 검증 방식: HTTP 다운로드 성공 + 파일 시작 서명 %PDF- 확인 + 페이지 수/한글 텍스트 수 기록
+          - 검증결과.csv에서 개별 파일 상태와 원본 URL 확인 가능
+          - 일부 PDF는 텍스트가 이미지/아웃라인으로 되어 있어 korean_chars가 0이어도 시각상 한글일 수 있음
+          EOF
+          echo "$success" > package/성공개수.txt
+          rm -rf package/text
+          zip -r -9 국내_한글_뷰티_브랜드소개서_20개.zip package >/dev/null
+          echo "SUCCESS_COUNT=$success" >> "$GITHUB_ENV"
+          ls -lh 국내_한글_뷰티_브랜드소개서_20개.zip
+          cat package/검증결과.csv
+          cat package/실패목록.txt || true
+
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: korean-beauty-brand-decks-20
+          path: 국내_한글_뷰티_브랜드소개서_20개.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Require all 20 PDFs
+        run: |
+          echo "Validated PDFs: ${SUCCESS_COUNT:-0}/20"
+          test "${SUCCESS_COUNT:-0}" = "20"
