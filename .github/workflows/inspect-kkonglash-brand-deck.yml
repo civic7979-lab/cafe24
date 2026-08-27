@@ -1,0 +1,57 @@
+name: Inspect KKONGLASH Brand Deck
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/inspect-kkonglash-brand-deck.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Inspect dynamic brand-deck page
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://link.inpock.co.kr/kkonglash.global'
+          curl -L --retry 3 -A 'Mozilla/5.0' -o raw.html "$url" || true
+          google-chrome --headless --no-sandbox --disable-gpu --virtual-time-budget=12000 --dump-dom "$url" > dom.html 2>chrome.log || true
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urljoin
+          class P(HTMLParser):
+              def __init__(self): super().__init__(); self.links=[]; self.cur=None; self.text=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=='a':
+                      self.cur=dict(attrs).get('href'); self.text=[]
+              def handle_data(self,d):
+                  if self.cur is not None: self.text.append(d)
+              def handle_endtag(self,tag):
+                  if tag=='a' and self.cur is not None:
+                      self.links.append((' '.join(''.join(self.text).split()),self.cur)); self.cur=None; self.text=[]
+          base='https://link.inpock.co.kr/kkonglash.global'
+          out=[]
+          for fn in ['raw.html','dom.html']:
+              p=P(); p.feed(Path(fn).read_text('utf-8',errors='ignore'))
+              out.append(f'--- {fn} ---')
+              for text,href in p.links:
+                  out.append(f'{text}\t{urljoin(base,href)}')
+          Path('links.txt').write_text('\n'.join(out),encoding='utf-8')
+          print(Path('links.txt').read_text())
+          PY
+      - name: Upload inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: kkonglash-link-inspection
+          path: |
+            raw.html
+            dom.html
+            links.txt
+            chrome.log
+          retention-days: 3
